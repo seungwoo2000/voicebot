@@ -1,11 +1,10 @@
 import streamlit as st
-from st_audiorec import st_audiorec
+from audio_recorder_streamlit import audio_recorder
 import openai
 import os
 from datetime import datetime
 from gtts import gTTS
 import base64
-import io
 
 # ── 상수 ──────────────────────────────────────────────
 SYSTEM_PROMPT = {
@@ -130,8 +129,13 @@ def main() -> None:
 
     with col1:
         st.subheader("질문하기")
-        # st_audiorec는 bytes 또는 None을 반환
-        audio_bytes = st_audiorec()
+        # audio_recorder: pydub 의존성 없음, 녹음 완료시 bytes 반환
+        audio_bytes = audio_recorder(
+            text="클릭하여 녹음하기",
+            recording_color="#e8383d",
+            neutral_color="#6aa36f",
+            icon_size="2x",
+        )
 
     # 새로운 녹음인지 확인 (이전과 동일한 데이터면 재처리 방지)
     is_new_audio = (
