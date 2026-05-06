@@ -1,10 +1,11 @@
 import streamlit as st
-from audiorecorder import audiorecorder
+from st_audiorec import st_audiorec
 import openai
 import os
 from datetime import datetime
 from gtts import gTTS
 import base64
+import io
 
 # ── 상수 ──────────────────────────────────────────────
 SYSTEM_PROMPT = {
@@ -14,10 +15,11 @@ SYSTEM_PROMPT = {
 
 # ── 기능 함수 ──────────────────────────────────────────
 
-def STT(audio, api_key: str) -> str:
-    """오디오 세그먼트를 텍스트로 변환 (OpenAI Whisper)."""
-    filename = "input.mp3"
-    audio.export(filename, format="mp3")
+def STT(audio_bytes: bytes, api_key: str) -> str:
+    """오디오 바이트를 텍스트로 변환 (OpenAI Whisper)."""
+    filename = "input.wav"
+    with open(filename, "wb") as f:
+        f.write(audio_bytes)
     try:
         client = openai.OpenAI(api_key=api_key)
         with open(filename, "rb") as f:
@@ -54,28 +56,25 @@ def TTS(text: str) -> None:
 # ── 세션 초기화 ────────────────────────────────────────
 
 def init_session() -> None:
-    """필요한 세션 상태 키를 초기화."""
     if "chat" not in st.session_state:
         st.session_state.chat = []
     if "messages" not in st.session_state:
         st.session_state.messages = [SYSTEM_PROMPT]
     if "OPENAI_API" not in st.session_state:
         st.session_state.OPENAI_API = ""
-    if "check_reset" not in st.session_state:
-        st.session_state.check_reset = False
+    if "last_audio" not in st.session_state:
+        st.session_state.last_audio = None
 
 
 def reset_session() -> None:
-    """대화 기록을 초기 상태로 리셋."""
     st.session_state.chat = []
     st.session_state.messages = [SYSTEM_PROMPT]
-    st.session_state.check_reset = True
+    st.session_state.last_audio = None
 
 
 # ── UI 헬퍼 ───────────────────────────────────────────
 
 def render_chat(chat: list) -> None:
-    """채팅 내역을 말풍선 형태로 렌더링."""
     for sender, time, message in chat:
         if sender == "user":
             bubble_style = "background-color:#007AFF;color:white;"
@@ -126,43 +125,45 @@ def main() -> None:
         if st.button(label="초기화"):
             reset_session()
 
-    # ── 메인 영역: 질문 / 답변 ──
+    # ── 메인 영역 ──
     col1, col2 = st.columns(2)
 
     with col1:
         st.subheader("질문하기")
-        audio = audiorecorder("클릭하여 녹음하기", "녹음 중...")
+        # st_audiorec는 bytes 또는 None을 반환
+        audio_bytes = st_audiorec()
 
-    # 녹음이 완료됐고 리셋 직후가 아닐 때만 처리
-    is_new_audio = audio.duration_seconds > 0 and not st.session_state.check_reset
+    # 새로운 녹음인지 확인 (이전과 동일한 데이터면 재처리 방지)
+    is_new_audio = (
+        audio_bytes is not None
+        and audio_bytes != st.session_state.last_audio
+    )
 
     if is_new_audio:
-        # 리셋 플래그 해제 (다음 녹음을 위해)
-        st.session_state.check_reset = False
+        st.session_state.last_audio = audio_bytes
 
         with col1:
-            st.audio(audio.export().read())
-            question = STT(audio, st.session_state.OPENAI_API)
+            st.audio(audio_bytes, format="audio/wav")
+
+        with st.spinner("음성을 인식하는 중..."):
+            question = STT(audio_bytes, st.session_state.OPENAI_API)
 
         now = datetime.now().strftime("%H:%M")
         st.session_state.chat.append(("user", now, question))
         st.session_state.messages.append({"role": "user", "content": question})
 
-        with col2:
-            st.subheader("질문/답변")
+        with st.spinner("답변을 생성하는 중..."):
             response = ask_gpt(st.session_state.messages, model, st.session_state.OPENAI_API)
 
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.session_state.chat.append(("bot", now, response))
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.session_state.chat.append(("bot", now, response))
 
+        with col2:
+            st.subheader("질문/답변")
             render_chat(st.session_state.chat)
             TTS(response)
 
     else:
-        # 리셋 플래그 해제
-        if st.session_state.check_reset:
-            st.session_state.check_reset = False
-
         with col2:
             st.subheader("질문/답변")
             render_chat(st.session_state.chat)
