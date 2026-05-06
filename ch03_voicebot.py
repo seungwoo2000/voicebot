@@ -1,6 +1,7 @@
 import streamlit as st
 import openai
 import os
+import hashlib
 from datetime import datetime
 from gtts import gTTS
 import base64
@@ -55,14 +56,14 @@ def init_session() -> None:
         st.session_state.messages = [SYSTEM_PROMPT]
     if "OPENAI_API" not in st.session_state:
         st.session_state.OPENAI_API = ""
-    if "last_audio_id" not in st.session_state:
-        st.session_state.last_audio_id = None
+    if "last_audio_hash" not in st.session_state:
+        st.session_state.last_audio_hash = None
 
 
 def reset_session() -> None:
     st.session_state.chat = []
     st.session_state.messages = [SYSTEM_PROMPT]
-    st.session_state.last_audio_id = None
+    st.session_state.last_audio_hash = None
 
 
 # ── UI 헬퍼 ───────────────────────────────────────────
@@ -123,15 +124,19 @@ def main() -> None:
 
     with col1:
         st.subheader("질문하기")
-        # st.audio_input: Streamlit 1.41+ 내장, 외부 패키지 불필요
         audio_file = st.audio_input("마이크 버튼을 눌러 녹음하세요")
 
-    # 새로운 녹음인지 확인 (file id로 중복 처리 방지)
-    audio_id = id(audio_file) if audio_file else None
-    is_new_audio = audio_file is not None and audio_id != st.session_state.last_audio_id
+    # 파일 내용의 hash로 새 녹음 여부 판단 (id()는 rerun마다 바뀌어 부적합)
+    if audio_file is not None:
+        audio_hash = hashlib.md5(audio_file.read()).hexdigest()
+        audio_file.seek(0)  # read 후 포인터 복원
+    else:
+        audio_hash = None
+
+    is_new_audio = audio_hash is not None and audio_hash != st.session_state.last_audio_hash
 
     if is_new_audio:
-        st.session_state.last_audio_id = audio_id
+        st.session_state.last_audio_hash = audio_hash
 
         with col1:
             st.audio(audio_file)
