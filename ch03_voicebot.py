@@ -91,7 +91,7 @@ def main() -> None:
     st.set_page_config(page_title="음성 비서 프로그램", layout="wide")
     init_session()
 
-    st.header("음성 비서 프로그램")
+    st.header("승우의 음성 비서 프로그램")
     st.markdown("---")
 
     with st.expander("음성비서 프로그램에 관하여", expanded=True):
