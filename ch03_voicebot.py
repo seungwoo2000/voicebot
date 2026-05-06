@@ -1,5 +1,4 @@
 import streamlit as st
-from audio_recorder_streamlit import audio_recorder
 import openai
 import os
 from datetime import datetime
@@ -14,19 +13,14 @@ SYSTEM_PROMPT = {
 
 # ── 기능 함수 ──────────────────────────────────────────
 
-def STT(audio_bytes: bytes, api_key: str) -> str:
-    """오디오 바이트를 텍스트로 변환 (OpenAI Whisper)."""
-    filename = "input.wav"
-    with open(filename, "wb") as f:
-        f.write(audio_bytes)
-    try:
-        client = openai.OpenAI(api_key=api_key)
-        with open(filename, "rb") as f:
-            response = client.audio.transcriptions.create(model="whisper-1", file=f)
-        return response.text
-    finally:
-        if os.path.exists(filename):
-            os.remove(filename)
+def STT(audio_file, api_key: str) -> str:
+    """UploadedFile을 텍스트로 변환 (OpenAI Whisper)."""
+    client = openai.OpenAI(api_key=api_key)
+    response = client.audio.transcriptions.create(
+        model="whisper-1",
+        file=audio_file,
+    )
+    return response.text
 
 
 def ask_gpt(messages: list, model: str, api_key: str) -> str:
@@ -61,14 +55,14 @@ def init_session() -> None:
         st.session_state.messages = [SYSTEM_PROMPT]
     if "OPENAI_API" not in st.session_state:
         st.session_state.OPENAI_API = ""
-    if "last_audio" not in st.session_state:
-        st.session_state.last_audio = None
+    if "last_audio_id" not in st.session_state:
+        st.session_state.last_audio_id = None
 
 
 def reset_session() -> None:
     st.session_state.chat = []
     st.session_state.messages = [SYSTEM_PROMPT]
-    st.session_state.last_audio = None
+    st.session_state.last_audio_id = None
 
 
 # ── UI 헬퍼 ───────────────────────────────────────────
@@ -129,28 +123,21 @@ def main() -> None:
 
     with col1:
         st.subheader("질문하기")
-        # audio_recorder: pydub 의존성 없음, 녹음 완료시 bytes 반환
-        audio_bytes = audio_recorder(
-            text="클릭하여 녹음하기",
-            recording_color="#e8383d",
-            neutral_color="#6aa36f",
-            icon_size="2x",
-        )
+        # st.audio_input: Streamlit 1.41+ 내장, 외부 패키지 불필요
+        audio_file = st.audio_input("마이크 버튼을 눌러 녹음하세요")
 
-    # 새로운 녹음인지 확인 (이전과 동일한 데이터면 재처리 방지)
-    is_new_audio = (
-        audio_bytes is not None
-        and audio_bytes != st.session_state.last_audio
-    )
+    # 새로운 녹음인지 확인 (file id로 중복 처리 방지)
+    audio_id = id(audio_file) if audio_file else None
+    is_new_audio = audio_file is not None and audio_id != st.session_state.last_audio_id
 
     if is_new_audio:
-        st.session_state.last_audio = audio_bytes
+        st.session_state.last_audio_id = audio_id
 
         with col1:
-            st.audio(audio_bytes, format="audio/wav")
+            st.audio(audio_file)
 
         with st.spinner("음성을 인식하는 중..."):
-            question = STT(audio_bytes, st.session_state.OPENAI_API)
+            question = STT(audio_file, st.session_state.OPENAI_API)
 
         now = datetime.now().strftime("%H:%M")
         st.session_state.chat.append(("user", now, question))
