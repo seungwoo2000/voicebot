@@ -4,7 +4,6 @@ import os
 import hashlib
 from datetime import datetime
 from gtts import gTTS
-import base64
 
 # ── 상수 ──────────────────────────────────────────────
 SYSTEM_PROMPT = {
@@ -32,16 +31,13 @@ def ask_gpt(messages: list, model: str, api_key: str) -> str:
 
 
 def TTS(text: str) -> None:
-    """텍스트를 음성으로 변환하여 자동 재생 (gTTS)."""
+    """텍스트를 음성으로 변환하여 재생 (gTTS)."""
     filename = "output.mp3"
     gTTS(text=text, lang="ko").save(filename)
     try:
         with open(filename, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-        st.markdown(
-            f'<audio autoplay="true"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>',
-            unsafe_allow_html=True,
-        )
+            audio_bytes = f.read()
+        st.audio(audio_bytes, format="audio/mp3", autoplay=True)
     finally:
         if os.path.exists(filename):
             os.remove(filename)
@@ -91,7 +87,7 @@ def main() -> None:
     st.set_page_config(page_title="음성 비서 프로그램", layout="wide")
     init_session()
 
-    st.header("승우의 음성 비서 프로그램")
+    st.header("음성 비서 프로그램")
     st.markdown("---")
 
     with st.expander("음성비서 프로그램에 관하여", expanded=True):
