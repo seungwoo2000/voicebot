@@ -126,43 +126,43 @@ def main() -> None:
         st.subheader("질문하기")
         audio_file = st.audio_input("마이크 버튼을 눌러 녹음하세요")
 
-    # 파일 내용의 hash로 새 녹음 여부 판단 (id()는 rerun마다 바뀌어 부적합)
+    # 파일 내용의 hash로 새 녹음 여부 판단
     if audio_file is not None:
         audio_hash = hashlib.md5(audio_file.read()).hexdigest()
-        audio_file.seek(0)  # read 후 포인터 복원
+        audio_file.seek(0)
     else:
         audio_hash = None
 
     is_new_audio = audio_hash is not None and audio_hash != st.session_state.last_audio_hash
 
-    if is_new_audio:
-        st.session_state.last_audio_hash = audio_hash
+    with col2:
+        st.subheader("질문/답변")
 
-        with col1:
-            st.audio(audio_file)
+        if is_new_audio:
+            with col1:
+                st.audio(audio_file)
 
-        with st.spinner("음성을 인식하는 중..."):
-            question = STT(audio_file, st.session_state.OPENAI_API)
+            if not st.session_state.OPENAI_API:
+                st.warning("⚠️ 사이드바에 OpenAI API 키를 먼저 입력해주세요.")
+            else:
+                # 처리 시작 전에 hash 저장 → rerun 중 중복 처리 방지
+                st.session_state.last_audio_hash = audio_hash
 
-        now = datetime.now().strftime("%H:%M")
-        st.session_state.chat.append(("user", now, question))
-        st.session_state.messages.append({"role": "user", "content": question})
+                with st.spinner("음성을 인식하는 중..."):
+                    question = STT(audio_file, st.session_state.OPENAI_API)
 
-        with st.spinner("답변을 생성하는 중..."):
-            response = ask_gpt(st.session_state.messages, model, st.session_state.OPENAI_API)
+                now = datetime.now().strftime("%H:%M")
+                st.session_state.chat.append(("user", now, question))
+                st.session_state.messages.append({"role": "user", "content": question})
 
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        st.session_state.chat.append(("bot", now, response))
+                with st.spinner("답변을 생성하는 중..."):
+                    response = ask_gpt(st.session_state.messages, model, st.session_state.OPENAI_API)
 
-        with col2:
-            st.subheader("질문/답변")
-            render_chat(st.session_state.chat)
-            TTS(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.session_state.chat.append(("bot", now, response))
+                TTS(response)
 
-    else:
-        with col2:
-            st.subheader("질문/답변")
-            render_chat(st.session_state.chat)
+        render_chat(st.session_state.chat)
 
 
 if __name__ == "__main__":
